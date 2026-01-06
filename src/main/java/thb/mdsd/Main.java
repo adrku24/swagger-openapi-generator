@@ -12,6 +12,7 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import lombok.NonNull;
+import thb.mdsd.plantuml.PlantUMLGenerator;
 import thb.mdsd.spring.SpringBootExtractor;
 import thb.mdsd.swagger.SwaggerAPIExport;
 
@@ -48,7 +49,8 @@ public class Main extends Application {
     private final Label statusLabel = new Label("Wähle ein Projektordner");
     private final TreeView<String> fileTreeView = new TreeView<>();
     private final Button selectFolderButton = new Button("Auswählen");
-    private final Button generateButton = new Button("Generieren");
+    private final Button generateButton = new Button("Generiere OpenAPI");
+    private final Button generatePlantUmlButton = new Button("Generiere PlantUML");
     private Stage primaryStage;
     private String selectedPath;
 
@@ -67,13 +69,14 @@ public class Main extends Application {
 
         selectFolderButton.setOnAction(_ -> openDirectoryChooser());
         generateButton.setOnAction(this::handleGenerateAction);
+        generatePlantUmlButton.setOnAction(this::handleGeneratePlantUml);
 
         final TreeItem<String> rootItem = new TreeItem<>("Kein Ordner ausgewählt...");
         fileTreeView.setRoot(rootItem);
         fileTreeView.setShowRoot(true);
 
         final HBox buttonContainer = new HBox(10);
-        buttonContainer.getChildren().addAll(selectFolderButton, generateButton);
+        buttonContainer.getChildren().addAll(selectFolderButton, generateButton, generatePlantUmlButton);
         buttonContainer.setAlignment(Pos.CENTER);
 
         final BorderPane information = new BorderPane();
@@ -94,6 +97,32 @@ public class Main extends Application {
         final Scene scene = new Scene(root, 600, 450);
         stage.setScene(scene);
         stage.show();
+    }
+
+    private void handleGeneratePlantUml(@NonNull ActionEvent event) {
+        if (selectedPath == null) {
+            statusLabel.setText("Kein Projektpfad ausgewählt!");
+            return;
+        }
+
+        final FileChooser chooser = new FileChooser();
+        chooser.setTitle("PlantUML exportieren");
+        chooser.setInitialDirectory(new File(selectedPath));
+        chooser.setInitialFileName("diagram.puml");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("PlantUML", "*.puml"));
+
+        final File out = chooser.showSaveDialog(primaryStage);
+        if (out == null) {
+            statusLabel.setText("Abgebrochen");
+            return;
+        }
+
+        try {
+            PlantUMLGenerator.generateFromProject(Path.of(selectedPath), out.toPath());
+            statusLabel.setText("PlantUML generiert: " + out.getAbsolutePath());
+        } catch (Exception e) {
+            statusLabel.setText("Fehler: " + e.getMessage());
+        }
     }
 
     private void openDirectoryChooser() {
@@ -117,8 +146,7 @@ public class Main extends Application {
 
     private void buildDirectoryTree(@NonNull TreeItem<String> parent, @NonNull Path dirPath) {
         try (final Stream<Path> stream = Files.list(dirPath)) {
-            stream
-                .filter(p -> !isHidden(p))
+            stream.filter(p -> !isHidden(p))
                 .sorted(Comparator.comparing(Main::isDirectory, Comparator.reverseOrder()).thenComparing(Path::getFileName))
                 .forEach(path -> {
                     final String name = path.getFileName().toString();
@@ -155,9 +183,7 @@ public class Main extends Application {
         fileChooser.setInitialDirectory(initialDir);
         fileChooser.setInitialFileName("swagger-api.yml");
 
-        fileChooser.getExtensionFilters().addAll(
-            new FileChooser.ExtensionFilter("Yaml Swagger Datei", "*.yaml")
-        );
+        fileChooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("Yaml Swagger Datei", "*.yaml"));
 
         final SpringBootExtractor extractor = new SpringBootExtractor(selectedPath);
 
